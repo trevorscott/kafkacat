@@ -43,4 +43,10 @@ For example, to read messages from the topic `your-topic`:
 $ kafkacat -t your-topic
 ```
 
+Or to write a message to `your-topic`:
+
+```
+"This is a good message." | kafkacat -P -t your-topic
+```
+
 See the [kafkacat README](https://github.com/edenhill/kafkacat/blob/master/README.md) for more examples.
