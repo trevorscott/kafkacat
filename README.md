@@ -50,3 +50,29 @@ Or to write a message to `your-topic`:
 ```
 
 See the [kafkacat README](https://github.com/edenhill/kafkacat/blob/master/README.md) for more examples.
+
+# Development
+
+## Save build to s3
+
+```bash
+git clone https://github.com/trevorscott/kafkacat-buildpack.git && cd kafkacat-buildpack
+heroku create kafkacat-buildpack-appname
+heroku buildpacks:set -i 1 https://github.com/trevorscott/heroku-buildpack-inline
+heroku config:set AWS_SECRET_ACCESS_KEY=<your-secret>
+heroku config:set AWS_ACCESS_KEY_ID=<your-access-key>
+git push heroku master
+heroku run bash
+```
+
+...and then once in your dyno's bash session...
+
+```bash
+$ tar -zcvf kafkacat.tar.gz kafkacat-binary/ 
+$ source bin/s3
+$ putS3 kafkacat.tar.gz
+```
+
+
+
+
