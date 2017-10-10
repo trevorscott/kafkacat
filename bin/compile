@@ -13,8 +13,11 @@ set -u
 BUILD_DIR=$1
 CACHE_DIR=$2
 ENV_DIR=$3
+#
+#   BP_DIR = BUILD_DIR 
+#
 BP_DIR=`cd $(dirname $0); cd ..; pwd`
-KAFKACAT_BUILD_DIR=${BUILD_DIR}/kafkacat/bin
+KAFKACAT_BUILD_DIR=${BUILD_DIR}/kafkacat-binary
 
 function topic() {
   echo "-----> $*"
@@ -28,111 +31,51 @@ function indent() {
   esac
 }
 
+
 #
-# This build is based off of the kafkacat bootstrap.sh script:
+# detect when building with inline buildpack
 #
-#   https://github.com/edenhill/kafkacat/blob/master/bootstrap.sh
+# BUILD_INLINE env variable set from the forked inline buildpack:
+#   https://github.com/trevorscott/heroku-buildpack-inline
 #
+if [ "${BUILD_INLINE:-false}" == "true" ]
+then
+    topic "Building kafkacat binary..."
 
-set -o errexit -o nounset -o pipefail
+    eval "$BP_DIR/bin/make-kafkacat $@"
 
-function github_download {
-    repo=$1
-    version=$2
-    dir=$3
+    mkdir -p $KAFKACAT_BUILD_DIR/bin
+    cp $BP_DIR/kafkacat $KAFKACAT_BUILD_DIR/bin/
 
-    url=https://github.com/${repo}/archive/${version}.tar.gz
+    mkdir -p $BUILD_DIR/.profile.d
+    
+    # ignore when building with inline buildpack
+    # don't need this since BP_DIR = BUILD_DIR
+    # cp $BP_DIR/.profile.d/* $BUILD_DIR/.profile.d/ || true
 
-    if [[ -d $dir ]]; then
-        echo "Directory $dir already exists, not downloading $url" | indent
-        return 0
-    fi
+    mkdir -p $BUILD_DIR/bin
+    cp $BP_DIR/bin/app/* $BUILD_DIR/bin/ 
 
-    echo "Downloading $url to $dir" | indent
-    if which wget 2>&1 > /dev/null; then
-        DL='wget -q -O-'
-    else
-        DL='curl -s -L'
-    fi
+    topic "Build of kafkacat SUCCEEDED!"
+    echo ""
+else
+    topic "Downloading kafkacat binary..."
+    # dl from s3
+    curl --progress-bar -O https://s3-us-west-1.amazonaws.com/kafkacat-buildpack/kafkacat.tar.gz
+    tar -xzf kafkacat.tar.gz
 
-    mkdir -p "$dir"
-    pushd "$dir" > /dev/null
-    ($DL "$url" | tar -xzf - --strip-components 1) || exit 1
-    popd > /dev/null
-}
+    mkdir -p $BUILD_DIR/.profile.d
+    cp $BP_DIR/.profile.d/* $BUILD_DIR/.profile.d/
 
-function build {
-    dir=$1
-    cmds=$2
+    mkdir -p $KAFKACAT_BUILD_DIR/bin
+    cp kafkacat-binary/bin/kafkacat $KAFKACAT_BUILD_DIR/bin/
 
+    mkdir -p $BUILD_DIR/bin
+    cp $BP_DIR/bin/app/* $BUILD_DIR/bin/ 
 
-    echo "Building $dir"
-    pushd $dir > /dev/null
-    set +o errexit
-    eval $cmds
-    ret=$?
-    set -o errexit
-    popd > /dev/null
-
-    if [[ $ret == 0 ]]; then
-        echo "Build of $dir SUCCEEDED!" | indent
-    else 
-        echo "Build of $dir FAILED!" | indent
-    fi
-
-    return $ret
-}
-
-function pkg_cfg_lib {
-    pkg=$1
-
-    local libs=$(PKG_CONFIG_PATH=$KAFKACAT_BUILD_DIR/usr/local/lib/pkgconfig pkg-config --libs --static $pkg)
-
-    # If pkg-config isnt working try grabbing the library list manually.
-    if [[ -z "$libs" ]]; then
-        libs=$(grep ^Libs.private $KAFKACAT_BUILD_DIR/usr/local/lib/pkgconfig/${pkg}.pc | sed -e s'/^Libs.private: //g')
-    fi
-
-    # Since we specify the exact .a files to link further down below
-    # we need to remove the -l<libname> here.
-    libs=$(echo $libs | sed -e "s/-l${pkg}//g")
-    echo " $libs"
-
-    >&2 echo "Using $libs for $pkg"
-}
+    topic "Install of kafkacat SUCCEEDED!"
+    echo ""
+fi
 
 
-mkdir -p $KAFKACAT_BUILD_DIR
-pushd $KAFKACAT_BUILD_DIR > /dev/null
 
-topic "Installing kafkacat dependencies..."
-
-github_download "edenhill/librdkafka" "master" "librdkafka"
-github_download "lloyd/yajl" "master" "libyajl"
-
-build librdkafka "([ -f config.h ] || ./configure) && make && make DESTDIR=\"${PWD}/\" install" || (echo "Failed to build librdkafka: bootstrap failed" ; false)
-
-build libyajl "([ -f config.h ] || ./configure) && make && make DESTDIR=\"${PWD}/\" install" || (echo "Failed to build libyajl: JSON support will probably be disabled" ; true)
-
-
-popd > /dev/null
-
-topic "Building kafkacat"
-export CPPFLAGS="${CPPFLAGS:-} -I$KAFKACAT_BUILD_DIR/usr/local/include"
-export LIBS="$(pkg_cfg_lib rdkafka) $(pkg_cfg_lib yajl)"
-export STATIC_LIB_rdkafka="$KAFKACAT_BUILD_DIR/usr/local/lib/librdkafka.a"
-export STATIC_LIB_yajl="$KAFKACAT_BUILD_DIR/usr/local/lib/libyajl_s.a"
-./configure --prefix=$KAFKACAT_BUILD_DIR --enable-static --enable-json 
-make
-
-cp kafkacat $KAFKACAT_BUILD_DIR/kafkacat
-
-mkdir -p $BUILD_DIR/.profile.d
-cp $BP_DIR/.profile.d/* $BUILD_DIR/.profile.d/
-
-mkdir -p $BUILD_DIR/bin
-cp $BP_DIR/bin/app/* $BUILD_DIR/bin/  
-
-echo ""
-topic "kafkacat built successfully!"
-echo ""
