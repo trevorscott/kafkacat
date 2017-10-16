@@ -5,7 +5,7 @@ Heroku buildpack for [kafkacat](https://github.com/edenhill/kafkacat), a command
 
 Makes an auto-configured `kafkacat` command available on the dyno.
 
-Installs Kafkacat version 1.3.1 with librdkafka 0.11.0.
+Installs kafkacat version 1.3.1 with librdkafka 0.11.0.
 
 # Set Up
 
