@@ -61,7 +61,7 @@ then
 else
     topic "Downloading kafkacat binary..."
     # dl from s3
-    curl --progress-bar -O https://s3-us-west-1.amazonaws.com/kafkacat-buildpack/kafkacat.tar.gz
+    curl --progress-bar -O https://s3.amazonaws.com/octo-public/kafkacat.tar.gz
     tar -xzf kafkacat.tar.gz
 
     mkdir -p $BUILD_DIR/.profile.d
